@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#111827">
+<title>Goalie SV% Calculator</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#111827;color:#111827}.app{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}.card{width:100%;max-width:430px;background:#fff;border-radius:24px;padding:28px;box-shadow:0 18px 50px rgba(0,0,0,.25)}.eyebrow{font-size:12px;font-weight:800;letter-spacing:2px}h1{margin:4px 0 0;font-size:38px;line-height:1.05}.subtitle{margin:8px 0 28px;color:#6b7280}label{display:block;margin:16px 0 8px;font-weight:700}input{width:100%;padding:16px;font-size:20px;border:2px solid #d1d5db;border-radius:12px;outline:none}button{width:100%;border:0;border-radius:12px;padding:16px;margin-top:22px;font-size:18px;font-weight:800;cursor:pointer}.result{margin-top:22px;padding:22px;border-radius:16px;background:#f3f4f6;text-align:center}.result-label{font-size:12px;font-weight:800;letter-spacing:1.5px;color:#6b7280}.sv{margin-top:4px;font-size:52px;font-weight:900}.saved{color:#6b7280;font-weight:600}.reset{background:transparent;color:#6b7280;margin-top:8px}.data-status{margin:10px 0 0;text-align:center;color:#6b7280;font-size:13px;font-weight:600}.error{min-height:20px;margin:8px 0 0;text-align:center;color:#b91c1c;font-weight:700}
+</style>
+</head>
+<body>
+<main class="app"><div class="card">
+<div class="eyebrow">ICE HOCKEY</div>
+<h1>Goalie SV%</h1>
+<p class="subtitle">Save Percentage Calculator</p>
+<p id="dataStatus" class="data-status">Loading goalie_data.csv…</p>
+<label for="shots">Total Shots</label>
+<input id="shots" type="number" min="0" step="1" inputmode="numeric" placeholder="0">
+<label for="goals">Total Goals</label>
+<input id="goals" type="number" min="0" step="1" inputmode="numeric" placeholder="0">
+
+<div class="result"><div class="result-label">SAVE PERCENTAGE</div><div id="sv" class="sv">—</div><div id="saved" class="saved">Enter shots and goals</div></div>
+<button type="button" id="reset" class="reset">Reset</button>
+<p id="error" class="error"></p>
+</div></main>
+<script>
+const shotsInput=document.getElementById("shots"),goalsInput=document.getElementById("goals"),sv=document.getElementById("sv"),saved=document.getElementById("saved"),error=document.getElementById("error"),dataStatus=document.getElementById("dataStatus");
+
+function calculate(){
+  error.textContent="";
+  if(shotsInput.value===""||goalsInput.value===""){sv.textContent="—";saved.textContent="Enter shots and goals";return}
+  const shots=Number(shotsInput.value),goals=Number(goalsInput.value);
+  if(!Number.isInteger(shots)||shots<0){error.textContent="Please enter a valid number of shots.";return}
+  if(!Number.isInteger(goals)||goals<0){error.textContent="Please enter a valid number of goals.";return}
+  if(shots===0){error.textContent="Shots must be greater than zero.";return}
+  if(goals>shots){error.textContent="Goals cannot be greater than shots.";return}
+  const saves=shots-goals;
+  sv.textContent=((saves/shots)*100).toFixed(1)+"%";
+  saved.textContent=saves+" saves from "+shots+" shots";
+}
+
+function parseCsv(text){
+  const rows=[];
+  let row=[],field="",quoted=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(quoted){
+      if(c==='"'&&text[i+1]==='"'){field+='"';i++}
+      else if(c==='"'){quoted=false}
+      else{field+=c}
+    }else{
+      if(c==='"'){quoted=true}
+      else if(c===','){row.push(field);field=""}
+      else if(c==='\n'){row.push(field);rows.push(row);row=[];field=""}
+      else if(c!=='\r'){field+=c}
+    }
+  }
+  if(field!==""||row.length){row.push(field);rows.push(row)}
+  return rows.filter(r=>r.some(v=>v.trim()!==""));
+}
+
+async function loadCsv(){
+  try{
+    const response=await fetch("goalie_data.csv",{cache:"no-store"});
+    if(!response.ok)throw new Error("HTTP "+response.status);
+    const rows=parseCsv(await response.text());
+    if(rows.length<2)throw new Error("CSV has no data rows");
+
+    const headers=rows[0].map(h=>h.trim().toLowerCase());
+    const shotsCol=headers.indexOf("totalshots");
+    const goalsCol=headers.indexOf("totalgoals");
+    if(shotsCol<0||goalsCol<0)throw new Error("Missing totalshots or totalgoals column");
+
+    let totalShots=0,totalGoals=0,eventCount=0;
+    for(const row of rows.slice(1)){
+      const shots=Number(row[shotsCol]);
+      const goals=Number(row[goalsCol]);
+      if(!Number.isInteger(shots)||shots<0||!Number.isInteger(goals)||goals<0||goals>shots){
+        throw new Error("Invalid shots/goals on CSV row "+(eventCount+2));
+      }
+      totalShots+=shots;
+      totalGoals+=goals;
+      eventCount++;
+    }
+
+    shotsInput.value=totalShots;
+    goalsInput.value=totalGoals;
+    calculate();
+    dataStatus.textContent="Loaded "+eventCount+" events from goalie_data.csv";
+  }catch(e){
+    dataStatus.textContent="CSV not loaded — enter totals manually";
+    console.warn("Could not load goalie_data.csv:",e);
+  }
+}
+
+function reset(){
+  shotsInput.value="";
+  goalsInput.value="";
+  sv.textContent="—";
+  saved.textContent="Enter shots and goals";
+  error.textContent="";
+  shotsInput.focus();
+}
+
+document.getElementById("reset").addEventListener("click",reset);
+[shotsInput,goalsInput].forEach(x=>x.addEventListener("input",calculate));
+loadCsv();
+</script>
+</body></html>
